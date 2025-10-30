@@ -220,5 +220,3 @@ Register-ScheduledTask -TaskName 'Windows Compliance Daily' -Action $action -Tri
 - **Utilisez** `-SharedCsvFolder` pour centraliser l’état des postes par jour (CSV + HTML copie).  
 - **Ouvrez** le rapport HTML dans un navigateur moderne pour profiter du **tri/filtres/mode sombre**.  
 - **Vérifiez** les logs dans `LogFolder` pour l’audit et le diagnostic.  
-
-Besoin d’une version *light* (moins de contrôles), d’un export JSON, ou d’un bouton *plein écran* dans l’UI ? Dis-le et je te fournis une variante prête à l’emploi.
