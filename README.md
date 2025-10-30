@@ -1,4 +1,4 @@
-# Windows Compliance Report v4 — Documentation (Markdown)
+# Windows Compliance Report
 
 ## 🎯 Objectif
 
