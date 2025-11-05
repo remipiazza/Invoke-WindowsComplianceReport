@@ -230,424 +230,426 @@ Pour chaque contrôle :
 
 ---
 
-### 7.1 Chiffrement / Plateforme
+## 7.1 Chiffrement / Plateforme
 
 1. **BitLocker OS protégé (TPM)**  
    - **Domaine** : Chiffrement  
-   - **Ce que ça vérifie** : le volume système `C:` est protégé par BitLocker, `ProtectionStatus = On`.  
-   - **Implémentation** : `Get-BitLockerVolume -MountPoint C:`  
+   - **Ce que ça vérifie** : le volume système `C:` est protégé par BitLocker avec une protection active.  
+   - **Implémentation** : `Get-BitLockerVolume -MountPoint C:` et vérification de `ProtectionStatus = On`.  
    - **Référentiels** : ANSSI (chiffrement des postes), CIS Windows, Microsoft Security Baselines (BitLocker).
 
 2. **Lecteurs de données chiffrés**  
    - **Domaine** : Chiffrement  
-   - **Ce que ça vérifie** : tous les volumes `Data` sont chiffrés ou aucun volume Data n’est présent.  
-   - **Implémentation** : `Get-BitLockerVolume | Where VolumeType=Data` et `ProtectionStatus`.  
-   - **Référentiels** : ANSSI (supports de stockage), CIS (Data drives), Microsoft (BitLocker sur volumes de données).
+   - **Ce que ça vérifie** : tous les volumes de type Data sont chiffrés, ou aucun volume Data n’est présent.  
+   - **Implémentation** : `Get-BitLockerVolume | Where-Object VolumeType -eq 'Data'` et contrôle de `ProtectionStatus`.  
+   - **Référentiels** : ANSSI (supports de stockage), CIS (Data drives), Baselines Microsoft (chiffrement des volumes de données).
 
 3. **Chiffrement XTS-AES 256 (si exigé)**  
    - **Domaine** : Chiffrement  
-   - **Ce que ça vérifie** : au moins un volume utilise XTS-AES 256 lorsqu’on l’exige.  
-   - **Implémentation** : `Get-BitLockerVolume | Select -Expand EncryptionMethod`.  
-   - **Référentiels** : recommandations sur les algorithmes / tailles de clé (ANSSI, Microsoft, CIS).
+   - **Ce que ça vérifie** : au moins un volume utilise XTS-AES 256 si cette exigence est en place.  
+   - **Implémentation** : `Get-BitLockerVolume | Select-Object -Expand EncryptionMethod` et recherche de `XTS-AES 256`.  
+   - **Référentiels** : ANSSI (choix des algorithmes), CIS BitLocker, Microsoft (recommandation XTS-AES 256).
 
 4. **TPM présent**  
    - **Domaine** : Plateforme  
-   - **Ce que ça vérifie** : présence d’un TPM sur la machine.  
-   - **Implémentation** : `Get-Tpm` (`TpmPresent`).  
-   - **Référentiels** : ANSSI (plateforme de confiance), CIS, Microsoft (TPM obligatoire pour certaines fonctionnalités).
+   - **Ce que ça vérifie** : la machine dispose d’un module TPM.  
+   - **Implémentation** : `Get-Tpm` et vérification de `TpmPresent`.  
+   - **Référentiels** : ANSSI Windows / plateforme de confiance, CIS Windows, Baselines Microsoft (TPM requis pour certaines fonctions).
 
 5. **TPM prêt**  
    - **Domaine** : Plateforme  
-   - **Ce que ça vérifie** : le TPM est initialisé et prêt (`TpmReady`).  
-   - **Implémentation** : `Get-Tpm`.  
-   - **Référentiels** : mêmes que ci-dessus.
+   - **Ce que ça vérifie** : le TPM est initialisé et prêt à l’emploi.  
+   - **Implémentation** : `Get-Tpm` et vérification de `TpmReady`.  
+   - **Référentiels** : ANSSI Windows 10 sécurité, CIS Windows, Baselines Microsoft.
 
 6. **TPM 2.0 (SpecVersion)**  
    - **Domaine** : Plateforme  
    - **Ce que ça vérifie** : la version de spécification du TPM est 2.0.  
-   - **Implémentation** : `Get-WmiObject Win32_Tpm` (namespace DeviceGuard) → `SpecVersion`.  
-   - **Référentiels** : ANSSI, Microsoft (TPM 2.0 recommandé / requis pour VBS, etc.), CIS.
+   - **Implémentation** : `Get-WmiObject -Namespace root\cimv2\Security\MicrosoftTpm -Class Win32_Tpm` et lecture de `SpecVersion`.  
+   - **Référentiels** : ANSSI (VBS, Device Guard), CIS, Microsoft (prérequis Windows 11 / VBS).
 
 7. **Secure Boot activé**  
    - **Domaine** : Plateforme  
-   - **Ce que ça vérifie** : UEFI Secure Boot est actif.  
+   - **Ce que ça vérifie** : Secure Boot (UEFI) est activé.  
    - **Implémentation** : `Confirm-SecureBootUEFI`.  
-   - **Référentiels** : ANSSI (chaîne de démarrage de confiance), Microsoft, CIS.
+   - **Référentiels** : ANSSI (chaîne de démarrage de confiance), CIS Windows, Baselines Microsoft.
 
 8. **Démarrage mesuré (VBS/HVCI prêt ?)**  
    - **Domaine** : Plateforme  
-   - **Ce que ça vérifie** : présence de services Device Guard / VBS configurés.  
-   - **Implémentation** : `Get-CimInstance Win32_DeviceGuard` → `SecurityServicesConfigured`.  
-   - **Référentiels** : ANSSI (VBS, Credential Guard), Microsoft (Device Guard / VBS), CIS.
+   - **Ce que ça vérifie** : la machine est prête pour Virtualization Based Security / Device Guard (services de sécurité configurés).  
+   - **Implémentation** : `Get-CimInstance Win32_DeviceGuard` et contrôle de `SecurityServicesConfigured`.  
+   - **Référentiels** : ANSSI Windows 10 sécu (VBS, Credential Guard), CIS, Microsoft (Device Guard / Memory Integrity).
+
 
 ---
 
-### 7.2 TLS / SSL
+## 7.2 TLS / SSL
 
-9. **TLS 1.2 Client activé**  
+1. **TLS 1.2 Client activé**  
    - **Domaine** : TLS/SSL  
-   - **Ce que ça vérifie** : TLS 1.2 côté client est activé dans SCHANNEL.  
-   - **Implémentation** : registre `HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client` `Enabled=1`.  
-   - **Référentiels** : ANSSI (version minimale TLS), CIS, Microsoft.
+   - **Ce que ça vérifie** : TLS 1.2 est activé côté client pour SCHANNEL.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client` avec `Enabled=1`.  
+   - **Référentiels** : ANSSI (TLS ≥ 1.2), CIS Windows, Baselines Microsoft.
 
-10. **TLS 1.2 Server activé**  
-    - **Domaine** : TLS/SSL  
-    - **Ce que ça vérifie** : TLS 1.2 côté serveur est activé.  
-    - **Implémentation** : même principe sous `...\TLS 1.2\Server`.  
-    - **Référentiels** : idem.
+2. **TLS 1.2 Server activé**  
+   - **Domaine** : TLS/SSL  
+   - **Ce que ça vérifie** : TLS 1.2 est activé côté serveur.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Server` avec `Enabled=1`.  
+   - **Référentiels** : ANSSI, CIS, Baselines Microsoft.
 
-11. **TLS 1.3 Client activé (si support)**  
-    - **Domaine** : TLS/SSL  
-    - **Ce que ça vérifie** : si les clés TLS 1.3 existent, `Enabled=1` côté client.  
-    - **Implémentation** : `...\Protocols\TLS 1.3\Client`.  
-    - **Référentiels** : adoption des versions récentes TLS.
+3. **TLS 1.3 Client activé (si support)**  
+   - **Domaine** : TLS/SSL  
+   - **Ce que ça vérifie** : si TLS 1.3 est disponible, il est activé côté client.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.3\Client` `Enabled=1` si présente, sinon considéré N/A.  
+   - **Référentiels** : ANSSI (versions récentes TLS), CIS Windows 11, Baselines Microsoft récentes.
 
-12. **TLS 1.3 Server activé (si support)**  
-    - **Domaine** : TLS/SSL  
-    - **Ce que ça vérifie** : idem côté serveur.  
-    - **Implémentation** : `...\Protocols\TLS 1.3\Server`.  
-    - **Référentiels** : idem.
+4. **TLS 1.3 Server activé (si support)**  
+   - **Domaine** : TLS/SSL  
+   - **Ce que ça vérifie** : si TLS 1.3 est disponible, il est activé côté serveur.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.3\Server` `Enabled=1` si présente, sinon N/A.  
+   - **Référentiels** : ANSSI, CIS Windows, Baselines Microsoft.
 
-13. **SSL 3.0 Client désactivé**  
-    - **Domaine** : TLS/SSL  
-    - **Ce que ça vérifie** : SSL 3.0 désactivé côté client.  
-    - **Implémentation** : `...\SSL 3.0\Client` `Enabled=0`.  
-    - **Référentiels** : ANSSI, CIS, Microsoft (POODLE).
+5. **SSL 3.0 Client désactivé**  
+   - **Domaine** : TLS/SSL  
+   - **Ce que ça vérifie** : SSL 3.0 est désactivé côté client.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 3.0\Client` `Enabled=0`.  
+   - **Référentiels** : ANSSI (interdiction SSL obsolètes), CIS, Microsoft (POODLE).
 
-14. **SSL 3.0 Server désactivé**  
-    - **Domaine** : TLS/SSL  
-    - **Ce que ça vérifie** : SSL 3.0 désactivé côté serveur.  
-    - **Implémentation** : `...\SSL 3.0\Server` `Enabled=0`.  
-    - **Référentiels** : idem.
+6. **SSL 3.0 Server désactivé**  
+   - **Domaine** : TLS/SSL  
+   - **Ce que ça vérifie** : SSL 3.0 est désactivé côté serveur.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\SSL 3.0\Server` `Enabled=0`.  
+   - **Référentiels** : ANSSI, CIS, Microsoft.
 
-15. **TLS 1.0 Client désactivé**  
-    - **Domaine** : TLS/SSL  
-    - **Ce que ça vérifie** : TLS 1.0 client désactivé.  
-    - **Implémentation** : `...\TLS 1.0\Client` `Enabled=0`.  
-    - **Référentiels** : ANSSI (TLS 1.0 obsolète), CIS, Microsoft.
+7. **TLS 1.0 Client désactivé**  
+   - **Domaine** : TLS/SSL  
+   - **Ce que ça vérifie** : TLS 1.0 est désactivé côté client.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client` `Enabled=0`.  
+   - **Référentiels** : ANSSI (TLS 1.0 obsolète), CIS, Baselines Microsoft.
 
-16. **TLS 1.1 Client désactivé**  
-    - **Domaine** : TLS/SSL  
-    - **Ce que ça vérifie** : TLS 1.1 client désactivé.  
-    - **Implémentation** : `...\TLS 1.1\Client` `Enabled=0`.  
-    - **Référentiels** : idem.
+8. **TLS 1.1 Client désactivé**  
+   - **Domaine** : TLS/SSL  
+   - **Ce que ça vérifie** : TLS 1.1 est désactivé côté client.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Client` `Enabled=0`.  
+   - **Référentiels** : ANSSI (éviter TLS 1.1), CIS, Baselines Microsoft.
 
----
-
-### 7.3 Réseau / SMB / Découverte
-
-17. **SMBv1 supprimé (feature)**  
-    - **Domaine** : Réseau/SMB  
-    - **Ce que ça vérifie** : la fonctionnalité SMB 1.0/CIFS est désactivée.  
-    - **Implémentation** : `Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol`.  
-    - **Référentiels** : ANSSI, CIS, Microsoft (post-WannaCry).
-
-18. **SMB signing requis (Client)**  
-    - **Domaine** : Réseau/SMB  
-    - **Ce que ça vérifie** : le client SMB exige la signature.  
-    - **Implémentation** : `Get-SmbClientConfiguration` → `RequireSecuritySignature`.  
-    - **Référentiels** : ANSSI, CIS, Microsoft Security Baselines.
-
-19. **SMB signing requis (Server)**  
-    - **Domaine** : Réseau/SMB  
-    - **Ce que ça vérifie** : le serveur SMB exige la signature.  
-    - **Implémentation** : `Get-SmbServerConfiguration` → `RequireSecuritySignature`.  
-    - **Référentiels** : idem.
-
-20. **Accès invité SMB interdit**  
-    - **Domaine** : Réseau/SMB  
-    - **Ce que ça vérifie** : l’accès invité non sécurisé est interdit.  
-    - **Implémentation** : `HKLM\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation` `AllowInsecureGuestAuth=0`.  
-    - **Référentiels** : ANSSI, CIS, Microsoft.
-
-21. **LLMNR désactivé**  
-    - **Domaine** : Réseau  
-    - **Ce que ça vérifie** : désactivation de LLMNR.  
-    - **Implémentation** : `HKLM\Software\Policies\Microsoft\Windows NT\DNSClient` `EnableMulticast=0`.  
-    - **Référentiels** : ANSSI (réduction surface d’attaque), CIS.
-
-22. **WPAD AutoDetect désactivé**  
-    - **Domaine** : Réseau  
-    - **Ce que ça vérifie** : désactivation de la découverte automatique WPAD (WinHTTP).  
-    - **Implémentation** : `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp` `DisableWpad=1`.  
-    - **Référentiels** : ANSSI (risques WPAD), bonnes pratiques Microsoft / CIS.
-
-23. **NetBIOS over TCP/IP désactivé**  
-    - **Domaine** : Réseau  
-    - **Ce que ça vérifie** : `NetbiosOptions=2` sur toutes les interfaces NetBT.  
-    - **Implémentation** : clés sous `HKLM\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces`.  
-    - **Référentiels** : ANSSI (services hérités), CIS.
-
-24. **mDNS 5353 bloqué (inbound)**  
-    - **Domaine** : Réseau  
-    - **Ce que ça vérifie** : existence d’au moins une règle pare-feu gérant/bloquant mDNS (port 5353) en entrée.  
-    - **Implémentation** : `Get-NetFirewallRule` filtré sur `Direction=Inbound` et `DisplayName` contenant `mDNS` ou `5353`.  
-    - **Référentiels** : pratiques de durcissement réseau (découverte de services).
 
 ---
 
-### 7.4 Identité / Comptes / RDP / LSA
+## 7.3 Réseau / SMB / Découverte
 
-25. **NTLMv2 uniquement (LmCompatibilityLevel>=5)**  
+1. **SMBv1 supprimé (feature)**  
+   - **Domaine** : Réseau/SMB  
+   - **Ce que ça vérifie** : la fonctionnalité SMB 1.0/CIFS est désactivée.  
+   - **Implémentation** : `Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol` et `State = Disabled`.  
+   - **Référentiels** : ANSSI (SMBv1 à proscrire), CIS Windows, Microsoft (post-WannaCry).
+
+2. **SMB signing requis (Client)**  
+   - **Domaine** : Réseau/SMB  
+   - **Ce que ça vérifie** : le client SMB exige la signature des communications.  
+   - **Implémentation** : `Get-SmbClientConfiguration` et `RequireSecuritySignature = $true`.  
+   - **Référentiels** : ANSSI (intégrité SMB), CIS Windows, Baselines Microsoft.
+
+3. **SMB signing requis (Server)**  
+   - **Domaine** : Réseau/SMB  
+   - **Ce que ça vérifie** : le serveur SMB exige la signature des communications.  
+   - **Implémentation** : `Get-SmbServerConfiguration` et `RequireSecuritySignature = $true`.  
+   - **Référentiels** : ANSSI, CIS Windows, Baselines Microsoft.
+
+4. **Accès invité SMB interdit**  
+   - **Domaine** : Réseau/SMB  
+   - **Ce que ça vérifie** : les accès invités non sécurisés sont interdits.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation` `AllowInsecureGuestAuth=0`.  
+   - **Référentiels** : ANSSI (partages invités), CIS, Baselines Microsoft.
+
+5. **LLMNR désactivé**  
+   - **Domaine** : Réseau  
+   - **Ce que ça vérifie** : le protocole LLMNR est désactivé (évite certaines attaques de spoofing).  
+   - **Implémentation** : clé `HKLM\Software\Policies\Microsoft\Windows NT\DNSClient` `EnableMulticast=0`.  
+   - **Référentiels** : ANSSI (réduction surface réseau), CIS Windows, Baselines Microsoft.
+
+6. **WPAD AutoDetect désactivé**  
+   - **Domaine** : Réseau  
+   - **Ce que ça vérifie** : la découverte automatique de proxy WPAD via WinHTTP est désactivée.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp` `DisableWpad=1`.  
+   - **Référentiels** : ANSSI (risques WPAD), CIS, bonnes pratiques Microsoft.
+
+7. **NetBIOS over TCP/IP désactivé**  
+   - **Domaine** : Réseau  
+   - **Ce que ça vérifie** : NetBIOS over TCP/IP est désactivé sur les interfaces.  
+   - **Implémentation** : lecture des clés sous `HKLM\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces` et recherche de `NetbiosOptions=2`.  
+   - **Référentiels** : ANSSI (services hérités), CIS Windows, durcissement Microsoft.
+
+8. **mDNS 5353 bloqué (inbound)**  
+   - **Domaine** : Réseau  
+   - **Ce que ça vérifie** : au moins une règle pare-feu gère/bloque le trafic mDNS (port 5353) en entrée.  
+   - **Implémentation** : `Get-NetFirewallRule` filtré sur `Direction = Inbound` et `DisplayName` contenant `mDNS` ou `5353`.  
+   - **Référentiels** : ANSSI (limiter découverte non contrôlée), CIS (pare-feu), Baselines Microsoft.
+
+
+---
+
+## 7.4 Identité / Comptes / RDP / LSA
+
+1. **NTLMv2 uniquement (LmCompatibilityLevel>=5)**  
+   - **Domaine** : Identité  
+   - **Ce que ça vérifie** : désactive LM et NTLMv1 ; l’authentification se fait en NTLMv2 uniquement.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\Lsa` `LmCompatibilityLevel>=5`.  
+   - **Référentiels** : ANSSI, CIS, Microsoft (NTLM hardening).
+
+2. **LSASS protégé (config)**  
+   - **Domaine** : Identité  
+   - **Ce que ça vérifie** : LSASS est configuré pour fonctionner en mode protégé (PPL), selon la version de l’OS.  
+   - **Implémentation** : dans `HKLM\SYSTEM\CurrentControlSet\Control\Lsa`, vérifie `RunAsPPL` (1 ou 2 selon build).  
+   - **Référentiels** : ANSSI (protection des secrets), CIS Windows, Microsoft (LSA Protection / Credential Guard).
+
+3. **RunAsPPLBoot=1 (early launch)**  
+   - **Domaine** : Identité  
+   - **Ce que ça vérifie** : LSASS protégé est lancé précocement au démarrage (early launch).  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\Lsa` `RunAsPPLBoot=1`.  
+   - **Référentiels** : Renforcement LSASS (Microsoft), CIS, ANSSI Windows 10 sécu.
+
+4. **NoLMHash=1**  
+   - **Domaine** : Identité  
+   - **Ce que ça vérifie** : les hash LM ne sont pas stockés.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\Lsa` `NoLMHash=1`.  
+   - **Référentiels** : ANSSI (hash obsolètes), CIS Windows, Microsoft.
+
+5. **LAPS activé (password local admin)**  
+   - **Domaine** : Identité  
+   - **Ce que ça vérifie** : un mécanisme LAPS (Windows LAPS GPO, Intune CSP ou legacy AdmPwd) gère les mots de passe des comptes locaux admin, avec rotation régulière.  
+   - **Implémentation** : lecture des clés LAPS (`HKLM\SOFTWARE\Policies\Microsoft\Windows\LAPS`, `HKLM\SOFTWARE\Microsoft\PolicyManager\current\device\LAPS`, `HKLM\SOFTWARE\Policies\Microsoft Services\AdmPwd`) + éventuellement le journal LAPS.  
+   - **Référentiels** : ANSSI (comptes locaux), ANSSI Admin AD, CIS Windows, Microsoft (Windows LAPS).
+
+6. **Admin intégré désactivé**  
+   - **Domaine** : Comptes  
+   - **Ce que ça vérifie** : le compte Administrateur intégré (RID 500) est désactivé.  
+   - **Implémentation** : `Get-LocalUser` et détection de SID se terminant par `-500`, puis `Enabled = $false`.  
+   - **Référentiels** : ANSSI, CIS Windows, Baselines Microsoft.
+
+7. **Invité désactivé**  
+   - **Domaine** : Comptes  
+   - **Ce que ça vérifie** : le compte Invité (RID 501) est désactivé.  
+   - **Implémentation** : `Get-LocalUser` et détection de SID se terminant par `-501`, puis `Enabled = $false`.  
+   - **Référentiels** : ANSSI, CIS Windows, Baselines Microsoft.
+
+8. **NLA exigée pour RDP**  
+   - **Domaine** : Accès distant  
+   - **Ce que ça vérifie** : l’authentification au niveau réseau (NLA) est obligatoire pour RDP.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp` `UserAuthentication=1`.  
+   - **Référentiels** : ANSSI (sécurisation RDP), CIS Windows, Baselines Microsoft.
+
+9. **RDP désactivé si non requis**  
+   - **Domaine** : Accès distant  
+   - **Ce que ça vérifie** : le service RDP est désactivé quand il n’est pas nécessaire.  
+   - **Implémentation** : clé `HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server` `fDenyTSConnections=1`.  
+   - **Référentiels** : ANSSI (réduire surface d’exposition), CIS, Baselines Microsoft.
+
+10. **Cache d’info d’auth minimale**  
     - **Domaine** : Identité  
-    - **Ce que ça vérifie** : désactive LM et NTLMv1 (NTLMv2 only).  
-    - **Implémentation** : `HKLM\SYSTEM\CurrentControlSet\Control\Lsa` `LmCompatibilityLevel>=5`.  
-    - **Référentiels** : ANSSI, CIS, Microsoft (NTLM hardening).
+    - **Ce que ça vérifie** : limite le nombre de connexions mises en cache localement (≤ 10).  
+    - **Implémentation** : clé `HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon` `CachedLogonsCount` (≤ 10 ou valeur par défaut acceptée).  
+    - **Référentiels** : CIS Windows, bonnes pratiques Microsoft.
 
-26. **LSASS protégé (config)**  
-    - **Domaine** : Identité  
-    - **Ce que ça vérifie** : LSASS en mode PPL selon la version de l’OS.  
-    - **Implémentation** :  
-      - si build ≥ 22621 → `RunAsPPL` ∈ {1,2}  
-      - sinon → `RunAsPPL=1`  
-      dans `HKLM\SYSTEM\CurrentControlSet\Control\Lsa`.  
-    - **Référentiels** : ANSSI (protection des secrets), Microsoft (LSA Protection), CIS.
-
-27. **RunAsPPLBoot=1 (early launch)**  
-    - **Domaine** : Identité  
-    - **Ce que ça vérifie** : démarrage anticipé de LSASS en mode protégé.  
-    - **Implémentation** : `HKLM\SYSTEM\CurrentControlSet\Control\Lsa` `RunAsPPLBoot=1`.  
-    - **Référentiels** : renforcement LSASS (Microsoft, CIS).
-
-28. **NoLMHash=1**  
-    - **Domaine** : Identité  
-    - **Ce que ça vérifie** : pas de stockage de hash LM.  
-    - **Implémentation** : `HKLM\SYSTEM\CurrentControlSet\Control\Lsa` `NoLMHash=1`.  
-    - **Référentiels** : ANSSI, CIS, Microsoft.
-
-29. **LAPS activé (password local admin)**  
-    - **Domaine** : Identité  
-    - **Ce que ça vérifie** : présence d’une configuration LAPS (Windows LAPS GPO, Windows LAPS Intune CSP ou LAPS Legacy) avec mots de passe locaux uniques, stockés en directory, rotation ≤ 30 jours.  
-    - **Implémentation** : lecture des clés LAPS + event log LAPS (fallback).  
-    - **Référentiels** : ANSSI (comptes locaux), Microsoft (Windows LAPS), CIS.
-
-30. **Admin intégré désactivé**  
-    - **Domaine** : Comptes  
-    - **Ce que ça vérifie** : le compte Administrateur intégré (`RID 500`) est désactivé.  
-    - **Implémentation** : `Get-LocalUser` match SID `S-1-5-21-...-500`.  
-    - **Référentiels** : ANSSI, CIS, Microsoft Baselines.
-
-31. **Invité désactivé**  
-    - **Domaine** : Comptes  
-    - **Ce que ça vérifie** : le compte Invité (`RID 501`) est désactivé.  
-    - **Implémentation** : `Get-LocalUser` match SID `S-1-5-21-...-501`.  
-    - **Référentiels** : idem.
-
-32. **NLA exigée pour RDP**  
-    - **Domaine** : Accès distant  
-    - **Ce que ça vérifie** : Network Level Authentication obligatoire pour RDP.  
-    - **Implémentation** : `HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp` `UserAuthentication=1`.  
-    - **Référentiels** : ANSSI RDP, CIS, Microsoft.
-
-33. **RDP désactivé si non requis**  
-    - **Domaine** : Accès distant  
-    - **Ce que ça vérifie** : Remote Desktop désactivé (`fDenyTSConnections=1`).  
-    - **Implémentation** : `HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server`.  
-    - **Référentiels** : durcissement d’exposition RDP (ANSSI, CIS).
-
-34. **Cache d’info d’auth minimale**  
-    - **Domaine** : Identité  
-    - **Ce que ça vérifie** : limite le nombre de logons mis en cache (≤ 10).  
-    - **Implémentation** : `HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon` `CachedLogonsCount<=10` (ou valeur par défaut acceptée).  
-    - **Référentiels** : CIS, bonnes pratiques Microsoft.
 
 ---
 
-### 7.5 Protection / Défense / Pare-feu / Exploit
+## 7.5 Protection / Défense / Pare-feu / Exploit
 
-35. **Pare-feu profils ON**  
-    - **Domaine** : Protection  
-    - **Ce que ça vérifie** : tous les profils pare-feu (Domain, Private, Public) sont activés.  
-    - **Implémentation** : `Get-NetFirewallProfile` → `Enabled`.  
-    - **Référentiels** : ANSSI, CIS, Microsoft.
+1. **Pare-feu profils ON**  
+   - **Domaine** : Protection  
+   - **Ce que ça vérifie** : tous les profils du pare-feu Windows (Domain, Private, Public) sont activés.  
+   - **Implémentation** : `Get-NetFirewallProfile` et vérification de `Enabled`.  
+   - **Référentiels** : ANSSI hygiène, CIS Windows, Baselines Microsoft.
 
-36. **Pare-feu inbound=Block**  
-    - **Domaine** : Protection  
-    - **Ce que ça vérifie** : l’action par défaut en entrée est **Block** sur au moins un profil (et généralement tous).  
-    - **Implémentation** : `Get-NetFirewallProfile | Select DefaultInboundAction`.  
-    - **Référentiels** : ANSSI (par défaut tout bloquer), CIS.
+2. **Pare-feu inbound=Block**  
+   - **Domaine** : Protection  
+   - **Ce que ça vérifie** : l’action par défaut en entrée est le blocage (Block) au niveau du pare-feu.  
+   - **Implémentation** : `Get-NetFirewallProfile` et lecture de `DefaultInboundAction`.  
+   - **Référentiels** : ANSSI (tout bloquer par défaut), CIS Windows, Baselines Microsoft.
 
-37. **Pare-feu outbound=Allow (par défaut)**  
-    - **Domaine** : Protection  
-    - **Ce que ça vérifie** : l’action par défaut en sortie est Allow (comportement standard).  
-    - **Implémentation** : `DefaultOutboundAction`.  
-    - **Référentiels** : indicateur plutôt informatif (non bloquant).
+3. **Pare-feu outbound=Allow (par défaut)**  
+   - **Domaine** : Protection  
+   - **Ce que ça vérifie** : l’action par défaut en sortie est Allow (comportement standard sans politique egress stricte).  
+   - **Implémentation** : `Get-NetFirewallProfile` et lecture de `DefaultOutboundAction`.  
+   - **Référentiels** : bonnes pratiques Microsoft / CIS (profil par défaut), utilisé ici surtout comme information.
 
-38. **Protection cloud MAPS (élevée)**  
-    - **Domaine** : Protection  
-    - **Ce que ça vérifie** : intégration Defender au cloud (MAPS) + envoi d’échantillons.  
-    - **Implémentation** : `Get-MpPreference` → `MAPSReporting`, `SubmitSamplesConsent`.  
-    - **Référentiels** : Microsoft Defender, Security Baselines, CIS.
+4. **Protection cloud MAPS (élevée)**  
+   - **Domaine** : Protection  
+   - **Ce que ça vérifie** : la protection cloud de Microsoft Defender (MAPS) est active, ainsi que l’envoi d’échantillons.  
+   - **Implémentation** : `Get-MpPreference` et contrôle de `MAPSReporting` et `SubmitSamplesConsent`.  
+   - **Référentiels** : Microsoft Defender, Baselines Microsoft, CIS Windows (config Defender).
 
-39. **Exploit Prot. – DEP (système) ON**  
-    - **Domaine** : Protection  
-    - **Ce que ça vérifie** : Data Execution Prevention globale activée.  
-    - **Implémentation** : `Get-ProcessMitigation -System` → `DEP.Enable`.  
-    - **Référentiels** : ANSSI, CIS, Microsoft Exploit Protection.
+5. **Exploit Prot. – DEP (système) ON**  
+   - **Domaine** : Protection  
+   - **Ce que ça vérifie** : Data Execution Prevention (DEP) est activé au niveau système.  
+   - **Implémentation** : `Get-ProcessMitigation -System` puis `DEP.Enable`.  
+   - **Référentiels** : ANSSI (mitigations), CIS Windows, Microsoft Exploit Protection.
 
-40. **Exploit Prot. – CFG (système) ON**  
-    - **Domaine** : Protection  
-    - **Ce que ça vérifie** : Control Flow Guard système activé.  
-    - **Implémentation** : `Get-ProcessMitigation -System` → `CFG.Enable`.  
-    - **Référentiels** : Microsoft Exploit Protection, CIS.
+6. **Exploit Prot. – CFG (système) ON**  
+   - **Domaine** : Protection  
+   - **Ce que ça vérifie** : Control Flow Guard (CFG) est activé au niveau système.  
+   - **Implémentation** : `Get-ProcessMitigation -System` puis `CFG.Enable`.  
+   - **Référentiels** : CIS Windows, Microsoft Exploit Protection, recommandations ANSSI.
 
-41. **Exploit Prot. – ASLR (BottomUp+HighEntropy) ON**  
-    - **Domaine** : Protection  
-    - **Ce que ça vérifie** : ASLR Bottom-Up + High Entropy (si supporté) activés.  
-    - **Implémentation** : `Get-ProcessMitigation -System` → `ASLR.BottomUp` + `ASLR.HighEntropy`.  
-    - **Référentiels** : Microsoft, CIS.
+7. **Exploit Prot. – ASLR (BottomUp+HighEntropy) ON**  
+   - **Domaine** : Protection  
+   - **Ce que ça vérifie** : ASLR system-wide est activé (BottomUp + High Entropy si disponible).  
+   - **Implémentation** : `Get-ProcessMitigation -System` puis `ASLR.BottomUp` et `ASLR.HighEntropy` (ou toléré si absent sur x86).  
+   - **Référentiels** : ANSSI (randomisation mémoire), CIS Windows, Baselines Microsoft.
 
-42. **Exploit Prot. – SEHOP (système) ON**  
-    - **Domaine** : Protection  
-    - **Ce que ça vérifie** : Structured Exception Handler Overwrite Protection activé.  
-    - **Implémentation** : `Get-ProcessMitigation -System` → `SEHOP.Enable`.  
-    - **Référentiels** : Microsoft, CIS.
+8. **Exploit Prot. – SEHOP (système) ON**  
+   - **Domaine** : Protection  
+   - **Ce que ça vérifie** : SEHOP (Structured Exception Handler Overwrite Protection) est activé au niveau système.  
+   - **Implémentation** : `Get-ProcessMitigation -System` puis `SEHOP.Enable`.  
+   - **Référentiels** : CIS Windows, Microsoft Exploit Protection.
 
-43. **Exploit Prot. – ASLR ForceRelocateImages ON**  
-    - **Domaine** : Protection  
-    - **Ce que ça vérifie** : relocation forcée des images (ASLR).  
-    - **Implémentation** : `ASLR.ForceRelocateImages`.  
-    - **Référentiels** : Microsoft Exploit Protection.
+9. **Exploit Prot. – ASLR ForceRelocateImages ON**  
+   - **Domaine** : Protection  
+   - **Ce que ça vérifie** : ASLR force la relocation des images chargées.  
+   - **Implémentation** : `Get-ProcessMitigation -System` puis `ASLR.ForceRelocateImages`.  
+   - **Référentiels** : Microsoft Exploit Protection, CIS Windows.
 
-44. **SmartScreen Windows ON**  
+10. **SmartScreen Windows ON**  
     - **Domaine** : Protection  
-    - **Ce que ça vérifie** : SmartScreen Windows global activé via GPO.  
-    - **Implémentation** : `HKLM\SOFTWARE\Policies\Microsoft\Windows\System` `EnableSmartScreen=1`.  
-    - **Référentiels** : Microsoft Security Baselines, CIS.
+    - **Ce que ça vérifie** : SmartScreen Windows (niveau OS) est activé via stratégie.  
+    - **Implémentation** : clé `HKLM\SOFTWARE\Policies\Microsoft\Windows\System` `EnableSmartScreen=1`.  
+    - **Référentiels** : Baselines Microsoft, CIS Windows, ANSSI (filtrage d’exécution / réputation).
 
-45. **Tamper Protection (signal)**  
+11. **Tamper Protection (signal)**  
     - **Domaine** : Protection  
-    - **Ce que ça vérifie** : présence de la clé `HKLM\SOFTWARE\Microsoft\Windows Defender\Features` (indicateur, non binaire strict).  
-    - **Implémentation** : existence de la clé (le contrôle est tolérant).  
-    - **Référentiels** : Microsoft Defender Tamper Protection (signal faible).
+    - **Ce que ça vérifie** : présence de la clé de fonctionnalités Defender indiquant une configuration de Tamper Protection (signal indicatif, non strict).  
+    - **Implémentation** : existence de `HKLM\SOFTWARE\Microsoft\Windows Defender\Features`.  
+    - **Référentiels** : Microsoft Defender (Tamper Protection), Baselines Microsoft.
+
 
 ---
 
-### 7.6 PowerShell / Journalisation
+## 7.6 PowerShell / Journalisation
 
-46. **ExecutionPolicy=AllSigned (MachinePolicy)**  
-    - **Domaine** : PowerShell  
-    - **Ce que ça vérifie** : politique d’exécution GPO machine = `AllSigned`.  
-    - **Implémentation** : `Get-ExecutionPolicy -Scope MachinePolicy`.  
-    - **Référentiels** : ANSSI (contrôle d’exécution de scripts), CIS, Microsoft.
+1. **ExecutionPolicy=AllSigned (MachinePolicy)**  
+   - **Domaine** : PowerShell  
+   - **Ce que ça vérifie** : la politique d’exécution PowerShell définie par GPO machine est `AllSigned`.  
+   - **Implémentation** : `Get-ExecutionPolicy -Scope MachinePolicy`.  
+   - **Référentiels** : ANSSI (scripts signés), CIS Windows, Baselines Microsoft PowerShell.
 
-47. **Script Block Logging ON**  
-    - **Domaine** : PowerShell  
-    - **Ce que ça vérifie** : journalisation des blocs de scripts PowerShell.  
-    - **Implémentation** : `HKLM\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging` `EnableScriptBlockLogging=1`.  
-    - **Référentiels** : ANSSI (journalisation renforcée), CIS, Microsoft Baselines.
+2. **Script Block Logging ON**  
+   - **Domaine** : PowerShell  
+   - **Ce que ça vérifie** : la journalisation des blocs de scripts PowerShell est activée.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging` `EnableScriptBlockLogging=1`.  
+   - **Référentiels** : ANSSI (journalisation détaillée), CIS Windows, Baselines Microsoft.
 
-48. **Module Logging ON**  
-    - **Domaine** : PowerShell  
-    - **Ce que ça vérifie** : journalisation des modules PowerShell.  
-    - **Implémentation** : `HKLM\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging` `EnableModuleLogging=1`.  
-    - **Référentiels** : idem.
+3. **Module Logging ON**  
+   - **Domaine** : PowerShell  
+   - **Ce que ça vérifie** : la journalisation des modules PowerShell est activée.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging` `EnableModuleLogging=1`.  
+   - **Référentiels** : ANSSI, CIS Windows, Baselines Microsoft.
 
-49. **Transcription ON**  
-    - **Domaine** : PowerShell  
-    - **Ce que ça vérifie** : transcription PowerShell via GPO activée.  
-    - **Implémentation** : `HKLM\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription` `EnableTranscripting=1`.  
-    - **Référentiels** : ANSSI, CIS, Microsoft Baselines.
+4. **Transcription ON**  
+   - **Domaine** : PowerShell  
+   - **Ce que ça vérifie** : la transcription PowerShell (capture des sessions) est activée via GPO.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription` `EnableTranscripting=1`.  
+   - **Référentiels** : ANSSI (traces des actions d’admin), CIS Windows, Baselines Microsoft.
 
-50. **ExecutionPolicy=AllSigned (UserPolicy si Machine Undefined)**  
-    - **Domaine** : PowerShell  
-    - **Ce que ça vérifie** : si la MachinePolicy n’est pas définie, alors UserPolicy = `AllSigned`.  
-    - **Implémentation** : `Get-ExecutionPolicy -Scope MachinePolicy` puis `UserPolicy`.  
-    - **Référentiels** : mêmes objectifs que le contrôle 46.
+5. **ExecutionPolicy=AllSigned (UserPolicy si Machine Undefined)**  
+   - **Domaine** : PowerShell  
+   - **Ce que ça vérifie** : si MachinePolicy n’est pas définie, la politique UserPolicy impose `AllSigned`.  
+   - **Implémentation** : lecture de `Get-ExecutionPolicy -Scope MachinePolicy`, puis de `UserPolicy` si MachinePolicy = `Undefined`.  
+   - **Référentiels** : ANSSI, CIS, Baselines Microsoft (contrôle des scripts côté utilisateur).
 
----
-
-### 7.7 Office / Edge
-
-51. **Bloquer macros depuis Internet (Office)**  
-    - **Domaine** : Office/Edge  
-    - **Ce que ça vérifie** : blocage des macros provenant d’Internet dans Word 16.0.  
-    - **Implémentation** : `HKCU\Software\Policies\Microsoft\Office\16.0\Word\Security` `BlockMacrosFromInternet=1`.  
-    - **Référentiels** : ANSSI macros, Microsoft, CIS Office.
-
-52. **SmartScreen Edge activé**  
-    - **Domaine** : Office/Edge  
-    - **Ce que ça vérifie** : SmartScreen activé dans Edge.  
-    - **Implémentation** : `HKLM\SOFTWARE\Policies\Microsoft\Edge` `SmartScreenEnabled=1`.  
-    - **Référentiels** : Microsoft Edge Security Baseline, CIS.
-
-53. **PUA/PUP blocking Edge**  
-    - **Domaine** : Office/Edge  
-    - **Ce que ça vérifie** : blocage des applications potentiellement indésirables (PUA) dans Edge.  
-    - **Implémentation** : `SmartScreenPuaEnabled=1`.  
-    - **Référentiels** : Microsoft, CIS.
-
-54. **SmartScreen Windows activé**  
-    - **Domaine** : Office/Edge  
-    - **Ce que ça vérifie** : même clé que contrôle 44 mais classée ici côté “navigateur / OS”.  
-    - **Implémentation** : `EnableSmartScreen=1`.  
-    - **Référentiels** : Microsoft, CIS.
 
 ---
 
-### 7.8 Périphériques / AutoRun / USB / Bluetooth
+## 7.7 Office / Edge
 
-55. **Exécution automatique désactivée**  
-    - **Domaine** : Périphériques  
-    - **Ce que ça vérifie** : AutoRun désactivé sur tous les types de lecteurs.  
-    - **Implémentation** : `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer` `NoDriveTypeAutoRun=255`.  
-    - **Référentiels** : ANSSI (supports amovibles), CIS.
+1. **Bloquer macros depuis Internet (Office)**  
+   - **Domaine** : Office/Edge  
+   - **Ce que ça vérifie** : les macros provenant d’Internet sont bloquées dans Word 16.0.  
+   - **Implémentation** : clé `HKCU\Software\Policies\Microsoft\Office\16.0\Word\Security` `BlockMacrosFromInternet=1`.  
+   - **Référentiels** : ANSSI (macro-malveillance), CIS Microsoft Office, Baselines Microsoft Office.
 
-56. **Stockage USB bloqué (politique)**  
-    - **Domaine** : Périphériques  
-    - **Ce que ça vérifie** : blocage général des périphériques de stockage amovibles via GPO.  
-    - **Implémentation** : `HKLM\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices` `Deny_All=1`.  
-    - **Référentiels** : ANSSI, CIS, Microsoft.
+2. **SmartScreen Edge activé**  
+   - **Domaine** : Office/Edge  
+   - **Ce que ça vérifie** : SmartScreen est activé dans Microsoft Edge.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Policies\Microsoft\Edge` `SmartScreenEnabled=1`.  
+   - **Référentiels** : CIS Microsoft Edge, Edge Security Baseline, ANSSI (navigation sécurisée).
 
-57. **Bluetooth service désactivé si inutile**  
-    - **Domaine** : Périphériques  
-    - **Ce que ça vérifie** : service `bthserv` désactivé ou arrêté si présent.  
-    - **Implémentation** : `Get-Service bthserv`.  
-    - **Référentiels** : surface d’attaque radio / proximité.
+3. **PUA/PUP blocking Edge**  
+   - **Domaine** : Office/Edge  
+   - **Ce que ça vérifie** : le blocage des applications potentiellement indésirables (PUA/PUP) est activé dans Edge.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Policies\Microsoft\Edge` `SmartScreenPuaEnabled=1`.  
+   - **Référentiels** : Microsoft (PUA protection), CIS Edge, Baselines Microsoft.
 
-58. **Désactiver camera si politique**  
-    - **Domaine** : Périphériques  
-    - **Ce que ça vérifie** : GPO de désactivation de la caméra (si appliquée).  
-    - **Implémentation** : `HKLM\SOFTWARE\Policies\Microsoft\Camera` `AllowCamera=0` ; si pas de clé, considéré “OK/N/A”.  
-    - **Référentiels** : confidentialité / durcissement.
+4. **SmartScreen Windows activé**  
+   - **Domaine** : Office/Edge  
+   - **Ce que ça vérifie** : SmartScreen Windows (même clé que 7.5.10) est activé pour l’écosystème navigateur / OS.  
+   - **Implémentation** : `HKLM\SOFTWARE\Policies\Microsoft\Windows\System` `EnableSmartScreen=1`.  
+   - **Référentiels** : Baselines Microsoft, CIS, ANSSI (filtrage URL / fichiers).
 
-59. **Désactiver Micro si politique**  
-    - **Domaine** : Périphériques  
-    - **Ce que ça vérifie** : GPO de restriction de l’accès au micro par les apps.  
-    - **Implémentation** : `HKLM\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy` `LetAppsAccessMicrophone=2` ; si pas de clé, considéré “OK/N/A”.  
-    - **Référentiels** : confidentialité / durcissement.
 
 ---
 
-### 7.9 Hygiène / Logs / Mises à jour
+## 7.8 Périphériques / AutoRun / USB / Bluetooth
 
-60. **Consumer Features désactivées**  
-    - **Domaine** : Hygiène  
-    - **Ce que ça vérifie** : désactivation des fonctionnalités “consommateur” (suggestions, apps sponsorisées, etc.).  
-    - **Implémentation** : `HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent` `DisableWindowsConsumerFeatures=1`.  
-    - **Référentiels** : Microsoft Baselines, CIS (bloat / distractions).
+1. **Exécution automatique désactivée**  
+   - **Domaine** : Périphériques  
+   - **Ce que ça vérifie** : AutoRun/AutoPlay sont désactivés pour tous les types de lecteurs.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer` `NoDriveTypeAutoRun=255`.  
+   - **Référentiels** : ANSSI hygiène (supports amovibles), CIS Windows, Baselines Microsoft.
 
-61. **Bloatware UWP supprimable (contrôle)**  
-    - **Domaine** : Hygiène  
-    - **Ce que ça vérifie** : absence de certaines apps UWP préinstallées (Xbox, Bing, Skype) hors exceptions :  
-      - on considère conforme si **aucun** package `Xbox|Bing|Skype` restant, à part `Microsoft.XboxGameCallableUI` et `Microsoft.BingSearch`.  
-    - **Implémentation** : `Get-AppxPackage -AllUsers | Where-Object { Name -match 'Xbox|Bing|Skype' -and Name -notin exceptions }`  
-    - **Référentiels** : hygiène / réduction de la surface d’attaque applicative.
+2. **Stockage USB bloqué (politique)**  
+   - **Domaine** : Périphériques  
+   - **Ce que ça vérifie** : les périphériques de stockage amovibles sont bloqués via politique.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices` `Deny_All=1`.  
+   - **Référentiels** : ANSSI (supports amovibles), CIS Windows, Baselines Microsoft (device control).
 
-62. **Journal Sécurité taille suffisante**  
-    - **Domaine** : Journalisation  
-    - **Ce que ça vérifie** : taille max du journal **Security** ≥ 256 MB.  
-    - **Implémentation** : `Get-WinEvent -ListLog Security` → `MaximumSizeInBytes -ge 256MB`.  
-    - **Référentiels** : ANSSI (journalisation riche), CIS, Microsoft.
+3. **Bluetooth service désactivé si inutile**  
+   - **Domaine** : Périphériques  
+   - **Ce que ça vérifie** : le service Bluetooth (`bthserv`) est désactivé ou arrêté s’il n’est pas nécessaire.  
+   - **Implémentation** : `Get-Service bthserv` puis contrôle de `StartType` et `Status`.  
+   - **Référentiels** : ANSSI (réduction surface radio), CIS Windows (services inutiles).
 
-63. **WU dernière installation ≤ 14 jours**  
-    - **Domaine** : Mises à jour  
-    - **Ce que ça vérifie** : existence d’une mise à jour Windows installée (hors signatures Defender si choisi) dans les 14 derniers jours.  
-    - **Implémentation** :  
-      - tentative via `Get-WindowsUpdateLog` + parsing de `WindowsUpdate.log` ;  
-      - fallback via COM `Microsoft.Update.Session` (historique WU) ;  
-      - filtre Defender / update de définitions selon param interne.  
-    - **Référentiels** : ANSSI (correctif régulier), CIS, Microsoft (Patch Tuesday, cadence de mises à jour).
+4. **Désactiver camera si politique**  
+   - **Domaine** : Périphériques  
+   - **Ce que ça vérifie** : une politique de désactivation de la caméra est appliquée si pertinente.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Policies\Microsoft\Camera` `AllowCamera=0` si présente, sinon considéré N/A/OK.  
+   - **Référentiels** : ANSSI / CNIL (confidentialité), Baselines Microsoft (Camera privacy).
+
+5. **Désactiver Micro si politique**  
+   - **Domaine** : Périphériques  
+   - **Ce que ça vérifie** : une politique limite l’accès des applications au micro.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy` `LetAppsAccessMicrophone=2` si présente, sinon N/A/OK.  
+   - **Référentiels** : Confidentialité (CNIL), Baselines Microsoft, durcissement des postes.
+
+
+---
+
+## 7.9 Hygiène / Logs / Mises à jour
+
+1. **Consumer Features désactivées**  
+   - **Domaine** : Hygiène  
+   - **Ce que ça vérifie** : les fonctionnalités “consommateur” Windows (apps sponsorisées, suggestions, etc.) sont désactivées.  
+   - **Implémentation** : clé `HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent` `DisableWindowsConsumerFeatures=1`.  
+   - **Référentiels** : CIS Windows, Baselines Microsoft (CloudContent), ANSSI (réduction bloat / télémétrie non nécessaire).
+
+2. **Bloatware UWP supprimable (contrôle)**  
+   - **Domaine** : Hygiène  
+   - **Ce que ça vérifie** : absence de certaines apps UWP préinstallées (Xbox, Bing, Skype) hors quelques exceptions nécessaires.  
+   - **Implémentation** : `Get-AppxPackage -AllUsers` filtré sur `Name` contenant `Xbox|Bing|Skype` et non dans la liste blanche (`Microsoft.XboxGameCallableUI`, `Microsoft.BingSearch`).  
+   - **Référentiels** : ANSSI (réduire la surface applicative), CIS Windows (built-in apps), Baselines Microsoft.
+
+3. **Journal Sécurité taille suffisante**  
+   - **Domaine** : Journalisation  
+   - **Ce que ça vérifie** : la taille maximale du journal Security est au moins de 256 Mo.  
+   - **Implémentation** : `Get-WinEvent -ListLog Security` et contrôle `MaximumSizeInBytes -ge 256MB`.  
+   - **Référentiels** : ANSSI hygiène (journalisation riche), ANSSI Admin AD, CIS Windows, Baselines Microsoft.
+
+4. **WU dernière installation ≤ 14 jours**  
+   - **Domaine** : Mises à jour  
+   - **Ce que ça vérifie** : au moins une mise à jour Windows (hors simples signatures, selon filtre) a été installée dans les 14 derniers jours.  
+   - **Implémentation** : génération de `WindowsUpdate.log` via `Get-WindowsUpdateLog` + parsing, puis fallback COM `Microsoft.Update.Session` pour l’historique d’updates ; comparaison de la date avec `(Get-Date).AddDays(-14)`.  
+   - **Référentiels** : ANSSI hygiène (mise à jour régulière), ANSSI Windows/AD, CIS Windows (Windows Update), Baselines Microsoft.
+
 
 ---
 
