@@ -672,3 +672,13 @@ Ce script est fourni à titre d’outil d’audit / de diagnostic :
 - il **ne remplace pas** un audit complet basé sur un référentiel formel (CIS, ANSSI, etc.) ;
 - il peut nécessiter des adaptations à ton contexte (politiques internes, contraintes applicatives, exemptions) ;
 - il est recommandé de le faire valider par les équipes **sécu / conformité** avant utilisation en production.
+
+## License
+
+This project is released under a custom **Non-Commercial License**.
+
+You are allowed to use, copy, modify, and distribute this software **for non-commercial purposes only**.  
+Any commercial use (including resale, inclusion in paid products or services, or use within a commercial offering)
+requires prior written permission from the author.
+
+See the [LICENSE](./LICENSE) file for details.
