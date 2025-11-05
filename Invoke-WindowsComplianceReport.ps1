@@ -221,9 +221,15 @@ $Checks = @(
   New-Check -Name 'LLMNR désactivé' -Domain 'Réseau' -Criticity 'Élevée' -Weight 4 -How 'HKLM:\...\DNSClient EnableMulticast=0' -Test {
     (Get-ItemProperty 'HKLM:\Software\Policies\Microsoft\Windows NT\DNSClient' -ea SilentlyContinue).EnableMulticast -eq 0
   }
-  New-Check -Name 'WPAD AutoDetect désactivé' -Domain 'Réseau' -Criticity 'Moyenne' -Weight 3 -How 'HKLM:\...\Internet Settings AutoDetect=0' -Test {
-    (Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings' -ea SilentlyContinue).AutoDetect -eq 0
+  New-Check -Name 'WPAD AutoDetect désactivé' -Domain 'Réseau' -Criticity 'Moyenne' -Weight 3 -How 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp DisableWpad=1' -Test {
+    try {
+      $c = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp' -ErrorAction SilentlyContinue
+      $c -and $c.DisableWpad -eq 1
+    } catch {
+      $false
+    }
   }
+
   New-Check -Name 'NetBIOS over TCP/IP désactivé' -Domain 'Réseau' -Criticity 'Moyenne' -Weight 3 -How 'HKLM:\SYSTEM\CCS\Services\NetBT\...\Interfaces NetbiosOptions=2' -Test {
     $ifs = Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces' -ea SilentlyContinue
     if(-not $ifs){$false} else { @($ifs | % {(Get-ItemProperty $_.PsPath).NetbiosOptions}) -contains 2 }
@@ -435,12 +441,19 @@ $Checks = @(
   New-Check -Name 'Consumer Features désactivées' -Domain 'Hygiène' -Criticity 'Faible' -Weight 2 -How 'HKLM:\...\CloudContent DisableWindowsConsumerFeatures=1' -Test {
     (Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' -ea SilentlyContinue).DisableWindowsConsumerFeatures -eq 1
   }
-  New-Check -Name 'Afficher extensions fichiers' -Domain 'Hygiène' -Criticity 'Faible' -Weight 2 -How 'HKCU:\...\Explorer\Advanced HideFileExt=0' -Test {
-    (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -ea SilentlyContinue).HideFileExt -eq 0
+  #New-Check -Name 'Afficher extensions fichiers' -Domain 'Hygiène' -Criticity 'Faible' -Weight 2 -How 'HKCU:\...\Explorer\Advanced HideFileExt=0' -Test {
+    #(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -ea SilentlyContinue).HideFileExt -eq 0
+  #}
+  New-Check -Name 'Bloatware UWP supprimable (contrôle)' -Domain 'Hygiène' -Criticity 'Faible' -Weight 2 -How "Get-AppxPackage -AllUsers | Where-Object { `$_.Name -match 'Xbox|Bing|Skype' -and `$_.Name -notin 'Microsoft.XboxGameCallableUI','Microsoft.BingSearch' }" -Test {
+    $bloat = Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue |
+             Where-Object {
+               $_.Name -match 'Xbox|Bing|Skype' -and
+               $_.Name -notin 'Microsoft.XboxGameCallableUI','Microsoft.BingSearch'
+             }
+
+    $bloat.Count -eq 0
   }
-  New-Check -Name 'Bloatware UWP supprimable (contrôle)' -Domain 'Hygiène' -Criticity 'Faible' -Weight 2 -How "Get-AppxPackage | match 'Xbox|Bing|Skype'" -Test {
-    (Get-AppxPackage | ? {$_.Name -match 'Xbox|Bing|Skype'}).Count -eq 0
-  }
+
   New-Check -Name 'Journal Sécurité taille suffisante' -Domain 'Journalisation' -Criticity 'Moyenne' -Weight 3 -How 'Get-WinEvent -ListLog Security' -Test {
     (Get-WinEvent -ListLog Security).MaximumSizeInBytes -ge 256MB
   }
@@ -815,166 +828,22 @@ if ($dir -and -not (Test-Path $dir)) { New-DirectoryIfMissing $dir }
 $html | Out-File -Encoding UTF8 -FilePath $OutFile
 Write-Host "Rapport généré : $OutFile"
 
-# ---------- Exports partagés (HTML + CSV) si dossier fourni ----------
-function Update-DailyCsvSafely {
-  param(
-    [Parameter(Mandatory)][string]$CsvPath,
-    [Parameter(Mandatory)][string]$NewLine,
-    [Parameter(Mandatory)][string]$Header,
-    [Parameter(Mandatory)][string]$SharedFolder
-  )
-
-  # --- Préparation répertoires ---
-  $utf8NoBom  = New-Object System.Text.UTF8Encoding($false)
-  $dir        = Split-Path -Parent $CsvPath
-  try { if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null } } catch {}
-  if (-not $SharedFolder) { $SharedFolder = $dir }
-  $pendingDirShare = Join-Path $SharedFolder 'pending'
-  $pendingDirLocal = 'C:\ProgramData\Audit\pending'
-  foreach($pd in @($pendingDirShare,$pendingDirLocal)){
-    try { if ($pd -and -not (Test-Path -LiteralPath $pd)) { New-Item -ItemType Directory -Force -Path $pd | Out-Null } } catch {}
-  }
-
-  # --- Helpers sûrs PS 5.1 ---
-  function Read-AllLinesSafe([string]$Path){
-    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return @() }
-    $tries=0; $last=''
-    while($tries -lt 6){
-      $fs=$sr=$null
-      try{
-        $fs = New-Object System.IO.FileStream($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
-        $sr = New-Object System.IO.StreamReader($fs,[Text.UTF8Encoding]::UTF8,$true)
-        $txt = $sr.ReadToEnd()
-        if ($null -ne $txt) { $txt = $txt -replace "^\uFEFF", '' }
-        return ($txt -split "`r?`n")
-      } catch {
-        $last=$_.Exception.Message
-        Start-Sleep -Milliseconds (120 + (Get-Random -Minimum 0 -Maximum 300))
-      } finally {
-        if($sr){$sr.Dispose()}; if($fs){$fs.Dispose()}
-      }
-      $tries++
-    }
-    Write-Warning "Lecture CSV échouée: $Path ($last)"
-    return @()
-  }
-
-  function Is-Header([string]$line){
-    if ([string]::IsNullOrWhiteSpace($line)) { return $false }
-    $l = $line.TrimStart([char]0xFEFF)
-    return $l -eq 'Host;ScorePercent;Passed;Total;CombinedCell;User;TimeISO'
-  }
-
-  function Parse-Time([string]$line){
-  if ([string]::IsNullOrWhiteSpace($line)) { return $null }
-  $p = $line.Split(';')
-  if ($p.Length -lt 7) { return $null }
-
-  $s = $p[6]
-  if ([string]::IsNullOrWhiteSpace($s)) { return $null }
-
-  $ci = [System.Globalization.CultureInfo]::InvariantCulture
-  try {
-    # Le CSV écrit TimeISO avec $Time.ToString('s') -> "yyyy-MM-ddTHH:mm:ss"
-    return [datetime]::ParseExact($s, 's', $ci)
-  } catch {
-    try { return [datetime]::Parse($s, $ci) } catch { return $null }
-  }
-}
-
-
-  function Add-Line([string]$L,[hashtable]$Map){
-    if ([string]::IsNullOrWhiteSpace($L) -or (Is-Header $L)) { return }
-    $parts = $L.Split(';')
-    if ($parts.Length -lt 1) { return }
-    $h = $parts[0]; if ([string]::IsNullOrWhiteSpace($h)) { return }
-    $h = $h.Trim()
-    $t = Parse-Time $L
-    if (-not $Map.ContainsKey($h)) { $Map[$h] = @{ line=$L; time=$t } }
-    else {
-      $old = $Map[$h]
-      if ($t -and ($null -eq $old.time -or $t -gt $old.time)) { $Map[$h] = @{ line=$L; time=$t } }
-    }
-  }
-
-  # --- Agrégation en mémoire ---
-  $lines = Read-AllLinesSafe -Path $CsvPath
-  $map = @{}
-  foreach($ln in $lines){ Add-Line $ln $map }
-
-  # absorbe pending (sur le partage si dispo)
-  $pend = @()
-  try { if ($pendingDirShare) { $pend = Get-ChildItem -Path $pendingDirShare -Filter '*.row' -ErrorAction Stop } } catch {}
-  foreach($f in $pend){
-    try{
-      $content = Get-Content -LiteralPath $f.FullName -Raw -Encoding UTF8 -ErrorAction Stop
-      if ($null -ne $content) { $content = $content -replace "^\uFEFF", '' }
-      Add-Line $content $map
-    } catch {
-      Write-Warning "Absorption pending échouée '$($f.Name)' : $($_.Exception.Message)"
-    }
-  }
-
-  Add-Line $NewLine $map   # ligne courante obligatoire
-
-  # --- Reconstruit le contenu final ---
-  $final = New-Object System.Collections.Generic.List[string]
-  $final.Add($Header) | Out-Null
-  foreach($kv in $map.GetEnumerator() | Sort-Object Key){ $final.Add($kv.Value.line) | Out-Null }
-  if ($final.Count -eq 0) { $final.Add($Header) | Out-Null }  # garde-fou absolu
-
-  $content = [string]::Join("`r`n",$final) + "`r`n"
-  $bytes   = $utf8NoBom.GetBytes($content)
-
-  # --- Écrit dans un fichier .new puis swap atomique (sans .tmp) ---
-  $tmp = Join-Path $dir ("{0}.new.{1}" -f [IO.Path]::GetFileName($CsvPath), [Guid]::NewGuid().ToString('N'))
-  try {
-    [System.IO.File]::WriteAllBytes($tmp, $bytes)
-  } catch {
-    Write-Warning "Écriture intermédiaire échouée ($tmp) : $($_.Exception.Message)"
-    # Fallback : dépose la ligne brute en pending (partage, puis local)
-    $fname = '{0:yyyyMMdd_HHmmssfff}_{1}.row' -f (Get-Date), $env:COMPUTERNAME
-    foreach($dest in @((Join-Path $pendingDirShare $fname),(Join-Path $pendingDirLocal $fname))){
-      try { [System.IO.File]::WriteAllText($dest,$NewLine,$utf8NoBom); Write-Warning "Ligne déposée dans '$dest'."; return } catch {}
-    }
-    Write-Error "Impossible d'écrire ni le CSV ni le pending (droits ? FSRM/AV ?)."; return
-  }
-
-  try {
-    if (Test-Path -LiteralPath $CsvPath) {
-      [System.IO.File]::Replace($tmp,$CsvPath,"$CsvPath.bak")
-    } else {
-      Move-Item -LiteralPath $tmp -Destination $CsvPath -Force
-    }
-    foreach($f in $pend){ Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue }
-    Write-Host ("CSV OK : {0} | hosts={1} | bytes={2}" -f $CsvPath, $map.Count, (Get-Item $CsvPath).Length)
-  } catch {
-    Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
-    # Dernier recours : déposer la ligne en pending
-    $fname2 = '{0:yyyyMMdd_HHmmssfff}_{1}.row' -f (Get-Date), $env:COMPUTERNAME
-    foreach($dest in @((Join-Path $pendingDirShare $fname2),(Join-Path $pendingDirLocal $fname2))){
-      try { [System.IO.File]::WriteAllText($dest,$NewLine,$utf8NoBom); Write-Warning "Swap atomique KO. Ligne déposée dans '$dest'."; return } catch {}
-    }
-    Write-Error "Swap atomique KO et pending KO. Vérifie droits NTFS/partage et FSRM/AV sur '$SharedFolder'."
-  }
-}
-
-
+# ---------- Exports partagés (HTML + CSV par poste) si dossier fourni ----------
 if ($SharedCsvFolder) {
   $sharedFolder = Resolve-SharedFolder $SharedCsvFolder
   $dateTag  = Get-Date -Format 'yyyyMMdd'
   $hostname = $env:COMPUTERNAME
 
-  # HTML partagé : yyyyMMdd_ComplianteReport_<ComputerName>.html
-  $sharedHtml = Join-Path $sharedFolder ("{0}_ComplianteReport_{1}.html" -f $dateTag,$hostname)
+  # HTML partagé par poste : yyyyMMdd_ComplianceReport_<ComputerName>.html
+  $sharedHtml = Join-Path $sharedFolder ("{0}_ComplianceReport_{1}.html" -f $dateTag,$hostname)
   $html | Out-File -Encoding UTF8 -FilePath $sharedHtml
   Write-Host "HTML partagé : $sharedHtml"
 
-  # CSV unique du jour : yyyyMMdd_ComplianceReport.csv
-  $csvPath = Join-Path $sharedFolder ("{0}_ComplianceReport.csv" -f $dateTag)
+  # CSV par poste : yyyyMMdd_ComplianceReport_<ComputerName>.csv
+  $csvPath = Join-Path $sharedFolder ("{0}_ComplianceReport_{1}.csv" -f $dateTag,$hostname)
   $header  = 'Host;ScorePercent;Passed;Total;CombinedCell;User;TimeISO'
 
-  # Prépare la nouvelle ligne poste
+  # Prépare la ligne pour CE poste
   $newLine = Convert-ToCsvSemicolonLine `
     -HostName $hostname `
     -ScorePercent $score `
@@ -984,8 +853,12 @@ if ($SharedCsvFolder) {
     -User "$($env:USERDOMAIN)\$($env:USERNAME)" `
     -Time (Get-Date)
 
-  # Mise à jour robuste et atomique
-  Update-DailyCsvSafely -CsvPath $csvPath -NewLine $newLine -Header $header -SharedFolder $sharedFolder
+  # Écrit un fichier CSV autonome : header + 1 ligne
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  $content   = $header + "`r`n" + $newLine + "`r`n"
+  [System.IO.File]::WriteAllText($csvPath, $content, $utf8NoBom)
+
+  Write-Host "CSV poste : $csvPath"
 }
 }
 finally {
