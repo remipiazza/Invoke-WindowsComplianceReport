@@ -1,4 +1,4 @@
-# WindowsComplianceReport.ps1 – README
+# WindowsComplianceReport.ps1
 
 Script PowerShell d’audit de conformité des postes Windows (workstations et serveurs) générant :
 
